@@ -10,6 +10,11 @@
 
 ---
 
+## Architecture Globale
+<img width="1735" height="898" alt="image" src="https://github.com/user-attachments/assets/dfa6d718-2164-4f5a-92a2-e0517e34ce16" />
+
+---
+
 ## 1. La Machine Victime (Agent "Spyware V4")
 
 Le code a été développé en **Python** en utilisant les bibliothèques `pynput` pour le clavier, `requests` pour le réseau et `Pillow` pour la gestion des images.
@@ -72,5 +77,3 @@ Le contrôleur est intégré au serveur sous forme d'endpoints API et d'un Dashb
 <img width="561" height="186" alt="image" src="https://github.com/user-attachments/assets/033ccf47-f5eb-4e39-b964-7c99222d9a8d" />
 <img width="555" height="200" alt="image" src="https://github.com/user-attachments/assets/c8d7601b-a6e2-4943-83d9-d95d97294ef8" />
 <img width="554" height="191" alt="image" src="https://github.com/user-attachments/assets/38d5c685-bdcd-41bd-b40f-2660b39481b8" />
-
-
