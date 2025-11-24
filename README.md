@@ -67,6 +67,9 @@ Le contrôleur est intégré au serveur sous forme d'endpoints API et d'un Dashb
 ### Presse papier toujours print :
 <img width="599" height="124" alt="image" src="https://github.com/user-attachments/assets/dc8d6a26-901b-44d6-84ea-8a9455f8a695" />
 
+### Audio enregistrés :
+<img width="1295" height="320" alt="image" src="https://github.com/user-attachments/assets/fbb2917b-bf27-4513-9661-4b00ed1b92ad" />
+
 ### Panel de base :
 <img width="940" height="510" alt="image" src="https://github.com/user-attachments/assets/fcf6d7a2-5ee6-455c-b698-2a5df2e936b5" />
 
